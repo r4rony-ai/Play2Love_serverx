@@ -1,66 +1,58 @@
 const express = require("express");
 const http = require("http");
-const cors = require("cors");
 const { Server } = require("socket.io");
+const cors = require("cors");
 
 const app = express();
 app.use(cors());
-
 const server = http.createServer(app);
+
 const io = new Server(server, {
   cors: {
-    origin: "*", // Use your Vercel link here for production
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
 
-const roomUsers = {}; // Track users by room
+const rooms = {};
 
 io.on("connection", (socket) => {
-  console.log("🔌 A user connected");
+  console.log("⚡ New client connected:", socket.id);
 
-  socket.on("join", ({ room, username }) => {
+  socket.on("join", (room) => {
     socket.join(room);
-    socket.room = room;
-    socket.username = username;
+    if (!rooms[room]) rooms[room] = [];
+    rooms[room].push(socket.id);
 
-    if (!roomUsers[room]) roomUsers[room] = [];
-
-    if (!roomUsers[room].includes(username)) {
-      roomUsers[room].push(username);
+    const partnerSocketId = rooms[room].find((id) => id !== socket.id);
+    if (partnerSocketId) {
+      io.to(partnerSocketId).emit("partner-joined", `Partner`);
+      socket.emit("partner-joined", `Partner`);
     }
 
-    // Notify others in the room
-    io.to(room).emit("joined", roomUsers[room]);
-    io.to(room).emit("user-list", roomUsers[room]);
-    console.log(`✅ ${username} joined room ${room}`);
+    console.log(`📥 Socket ${socket.id} joined room ${room}`);
   });
 
   socket.on("draw", (data) => {
     socket.to(data.room).emit("draw", data);
   });
 
-  socket.on("start-game", ({ room }) => {
-    socket.to(room).emit("start-game");
+  socket.on("chat", ({ room, msg, username }) => {
+    socket.to(room).emit("chat", { username, msg });
   });
 
   socket.on("disconnect", () => {
-    const room = socket.room;
-    const username = socket.username;
-
-    if (room && roomUsers[room]) {
-      roomUsers[room] = roomUsers[room].filter(name => name !== username);
-      io.to(room).emit("user-list", roomUsers[room]);
-      console.log(`❌ ${username} left room ${room}`);
+    console.log("❌ Client disconnected:", socket.id);
+    for (const room in rooms) {
+      rooms[room] = rooms[room].filter(id => id !== socket.id);
+      if (rooms[room].length === 0) {
+        delete rooms[room];
+      }
     }
   });
 });
 
-app.get("/", (req, res) => {
-  res.send("🟢 Play2Love Socket.IO Server Running");
-});
-
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`🚀 Server listening on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
