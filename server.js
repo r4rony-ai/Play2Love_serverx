@@ -1,58 +1,20 @@
-const express = require("express");
-const http = require("http");
-const { Server } = require("socket.io");
-const cors = require("cors");
+const app = express(); const server = http.createServer(app);
 
-const app = express();
 app.use(cors());
-const server = http.createServer(app);
 
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
+const io = new Server(server, { cors: { origin: ["https://love-testing.vercel.app"], methods: ["GET", "POST"] }, transports: ["websocket"] });
 
-const rooms = {};
+io.on("connection", (socket) => { console.log("🔌 New client connected:", socket.id);
 
-io.on("connection", (socket) => {
-  console.log("⚡ New client connected:", socket.id);
+socket.on("joinRoom", ({ room, username }) => { socket.join(room); socket.room = room; socket.username = username; console.log(👥 ${username} joined room: ${room}); socket.to(room).emit("partnerJoined", { username }); });
 
-  socket.on("join", (room) => {
-    socket.join(room);
-    if (!rooms[room]) rooms[room] = [];
-    rooms[room].push(socket.id);
+socket.on("drawing", (data) => { socket.to(socket.room).emit("drawing", data); });
 
-    const partnerSocketId = rooms[room].find((id) => id !== socket.id);
-    if (partnerSocketId) {
-      io.to(partnerSocketId).emit("partner-joined", `Partner`);
-      socket.emit("partner-joined", `Partner`);
-    }
+socket.on("chat", ({ message }) => { socket.to(socket.room).emit("chat", { message, username: socket.username }); });
 
-    console.log(`📥 Socket ${socket.id} joined room ${room}`);
-  });
+socket.on("clear", () => { socket.to(socket.room).emit("clear"); });
 
-  socket.on("draw", (data) => {
-    socket.to(data.room).emit("draw", data);
-  });
+socket.on("disconnect", () => { console.log("❌ Client disconnected:", socket.id); }); });
 
-  socket.on("chat", ({ room, msg, username }) => {
-    socket.to(room).emit("chat", { username, msg });
-  });
+const PORT = process.env.PORT || 3000; server.listen(PORT, () => { console.log(🚀 Server running on port ${PORT}); });
 
-  socket.on("disconnect", () => {
-    console.log("❌ Client disconnected:", socket.id);
-    for (const room in rooms) {
-      rooms[room] = rooms[room].filter(id => id !== socket.id);
-      if (rooms[room].length === 0) {
-        delete rooms[room];
-      }
-    }
-  });
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
