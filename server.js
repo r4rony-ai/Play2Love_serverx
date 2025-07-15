@@ -2,7 +2,7 @@ const app = express(); const server = http.createServer(app);
 
 app.use(cors());
 
-const io = new Server(server, { cors: { origin: ["https://love-testing.vercel.app"], methods: ["GET", "POST"] }, transports: ["websocket"] });
+const io = new Server(server, { cors: { origin: ["https://play2love-testing.vercel.app"], methods: ["GET", "POST"] }, transports: ["websocket"] });
 
 const activeRooms = new Map();
 
