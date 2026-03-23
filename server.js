@@ -1,50 +1,46 @@
 const express = require("express");
 const http = require("http");
-const { Server } = require("socket.io");
 const cors = require("cors");
+const { Server } = require("socket.io");
 
 const app = express();
-const server = http.createServer(app);
-
 app.use(cors());
 
+const server = http.createServer(app);
+
 const io = new Server(server, {
-  cors: {
-    origin: ["https://love-testing.vercel.app"],
-    methods: ["GET", "POST"],
-  },
-  transports: ["websocket"]
+  cors: { origin: "*" }
 });
 
+let rooms = {};
+
 io.on("connection", (socket) => {
-  console.log("🔌 Client connected:", socket.id);
 
   socket.on("joinRoom", ({ room, username }) => {
     socket.join(room);
-    socket.room = room;
-    socket.username = username;
-    console.log(`👥 ${username} joined room: ${room}`);
-    socket.to(room).emit("partnerJoined", { username });
+
+    if (!rooms[room]) rooms[room] = [];
+    rooms[room].push({ id: socket.id, username });
+
+    io.to(room).emit("roomUsers", rooms[room]);
+
+    if (rooms[room].length === 2) {
+      io.to(room).emit("start");
+    }
   });
 
-  socket.on("drawing", (data) => {
-    socket.to(socket.room).emit("drawing", data);
-  });
-
-  socket.on("chat", ({ message }) => {
-    socket.to(socket.room).emit("chat", { message, username: socket.username });
-  });
-
-  socket.on("clear", () => {
-    socket.to(socket.room).emit("clear");
+  socket.on("chat", ({ room, message }) => {
+    socket.to(room).emit("chat", message);
   });
 
   socket.on("disconnect", () => {
-    console.log("❌ Client disconnected:", socket.id);
+    for (let room in rooms) {
+      rooms[room] = rooms[room].filter(u => u.id !== socket.id);
+      io.to(room).emit("roomUsers", rooms[room]);
+    }
   });
+
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+server.listen(PORT, () => console.log("Server running"));
